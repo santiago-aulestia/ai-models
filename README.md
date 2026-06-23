@@ -47,6 +47,28 @@ Key behaviors:
 
 ---
 
+### [Boat Navigator AI](boat-navigator-readme.md)
+
+**File:** `boat-navigator.cs`  **Project:** `boat-navigator.csproj`  **GUI:** WinForms
+
+A WinForms application that trains a neural network to navigate a boat from point A to point B through a dynamic grid of wind and water currents. Two independent engines (differential steering) and a sail are the only controls.
+
+| Component | Details |
+|-----------|---------|
+| Environment | N×N grid (starts 5×5, grows on demand), each cell has wind + current vector |
+| Policy Network | 13 inputs → 32 → 16 → 3 outputs (port throttle, starboard throttle, sail angle) |
+| Training | 8 parallel background workers, reward-weighted regression |
+| GUI | 600×600 animated grid, cell editor, live reward chart, best-path overlay |
+
+Key features:
+- **Grow grid** one cell at a time (5×5 → 6×6 → … → any size) — existing cells preserved
+- **Click any cell** to edit its wind direction, wind magnitude, current direction, and current magnitude in real time
+- **Arrows scale** with cell size — prominent at 5×5, fine-grained at 25×25
+
+→ [Full documentation](boat-navigator-readme.md)
+
+---
+
 ## Running Any Model
 
 ```bash
