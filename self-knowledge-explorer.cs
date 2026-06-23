@@ -596,6 +596,19 @@ result  = mean(reward)",
         const string DataDir    = ".data";
         const string StateFile  = ".data/self-knowledge-state.dat";
         const string BitmapFile = ".data/self-knowledge-state.bmp";
+        const string ProgramLog = ".data/self-knowledge-programs.log";
+
+        void LogProgram(int iter, KnowledgeFact gap, Experiment exp, ExperimentResult result)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"[iter {iter:D2}] {gap.Topic}  conf {gap.Confidence:F2} → {result.Confidence:F2}");
+            foreach (var line in exp.Code.Split('\n'))
+                sb.AppendLine(line.TrimEnd());
+            sb.AppendLine($"Finding    : {result.Finding}");
+            if (result.ContradictsPrior) sb.AppendLine("           ⚠ contradicts prior");
+            sb.AppendLine();
+            File.AppendAllText(ProgramLog, sb.ToString());
+        }
 
         public void Run()
         {
@@ -605,6 +618,9 @@ result  = mean(reward)",
             Console.WriteLine("║           Self-Knowledge Explorer  — Hybrid AI               ║");
             Console.WriteLine("║  Generates programs to understand its own decision behavior   ║");
             Console.WriteLine("╚═══════════════════════════════════════════════════════════════╝\n");
+
+            var _sep = new string('=', 64);
+            File.AppendAllText(ProgramLog, $"\n{_sep}\n=== Run {DateTime.Now:yyyy-MM-dd HH:mm:ss} ===\n{_sep}\n\n");
 
             bool resumed = _kb.Load(StateFile);
             if (!resumed) Seed();
@@ -662,6 +678,8 @@ result  = mean(reward)",
                     Console.WriteLine("  ⚠  Result contradicts prior hypothesis.");
                     Console.ResetColor();
                 }
+
+                LogProgram(_iteration, gap, experiment, result);
 
                 // 4. Update knowledge base
                 _kb.Update(gap.Topic, result.Value, result.Confidence, result.ContradictsPrior);
