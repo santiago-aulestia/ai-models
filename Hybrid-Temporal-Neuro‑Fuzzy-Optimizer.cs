@@ -83,6 +83,7 @@ namespace HybridTemporalAI
             Console.WriteLine($"\nTraining complete. Total steps: {finalStep:N0}");
 
             network.Save(WeightsFile, finalStep, totalReward);
+            BmpWriter.BackupIfExists(BitmapFile);
             network.SaveBitmap(BitmapFile);
             Console.WriteLine($"Weights saved → {WeightsFile}");
             Console.WriteLine($"Weight map   → {BitmapFile}");
@@ -507,6 +508,19 @@ namespace HybridTemporalAI
             if (t < 0.5) { byte v = (byte)(t * 2 * 255); return (v, v, 255); }
             byte u = (byte)((1 - (t - 0.5) * 2) * 255);
             return (255, u, u);
+        }
+
+        public static void BackupIfExists(string path)
+        {
+            if (!File.Exists(path)) return;
+            string dir  = Path.GetDirectoryName(path) ?? ".";
+            string stem = Path.GetFileNameWithoutExtension(path);
+            string ext  = Path.GetExtension(path);
+            int n = 1;
+            string backup;
+            do { backup = Path.Combine(dir, $"{stem}.{n++}{ext}"); } while (File.Exists(backup));
+            File.Move(path, backup);
+            Console.WriteLine($"  Backed up  → {Path.GetFileName(backup)}");
         }
     }
 }

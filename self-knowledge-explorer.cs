@@ -777,6 +777,7 @@ result  = mean(reward)",
             _kb.Print();
 
             _kb.Save(StateFile);
+            BmpWriter.BackupIfExists(BitmapFile);
             _kb.SaveBitmap(BitmapFile);
             Console.WriteLine($"State saved  → {StateFile}");
             Console.WriteLine($"Confidence map → {BitmapFile}");
@@ -818,6 +819,19 @@ result  = mean(reward)",
             c = c < 0 ? 0 : c > 1 ? 1 : c;
             if (c < 0.5) return (255, (byte)(c * 2 * 255), 0);
             return ((byte)((1 - (c - 0.5) * 2) * 255), 255, 0);
+        }
+
+        public static void BackupIfExists(string path)
+        {
+            if (!File.Exists(path)) return;
+            string dir  = Path.GetDirectoryName(path) ?? ".";
+            string stem = Path.GetFileNameWithoutExtension(path);
+            string ext  = Path.GetExtension(path);
+            int n = 1;
+            string backup;
+            do { backup = Path.Combine(dir, $"{stem}.{n++}{ext}"); } while (File.Exists(backup));
+            File.Move(path, backup);
+            Console.WriteLine($"  Backed up  → {Path.GetFileName(backup)}");
         }
     }
 
