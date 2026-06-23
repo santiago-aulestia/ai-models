@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace SelfKnowledgeAI
@@ -93,6 +94,77 @@ namespace SelfKnowledgeAI
                 Console.WriteLine($"  {bar} {f.Confidence:F2}{res}  {f.Topic,-30} = {val}{note}");
             }
             Console.WriteLine("────────────────────────────────────────────────────────────────\n");
+        }
+
+        public void Save(string path)
+        {
+            using var writer = new StreamWriter(path);
+            foreach (var f in _facts)
+            {
+                string note = (f.HumanNote ?? "").Replace("|", "\\|");
+                string hypo = f.Hypothesis.Replace("|", "\\|");
+                string val  = double.IsNaN(f.Value) ? "NaN" : f.Value.ToString("R");
+                writer.WriteLine($"{f.Topic}|{hypo}|{f.Confidence:R}|{val}|{f.Strikes}|{f.Attempts}|{f.Resolved}|{note}");
+            }
+        }
+
+        public bool Load(string path)
+        {
+            if (!File.Exists(path)) return false;
+            _facts.Clear();
+            foreach (var line in File.ReadAllLines(path))
+            {
+                var p = line.Split('|');
+                if (p.Length < 8) continue;
+                _facts.Add(new KnowledgeFact
+                {
+                    Topic      = p[0],
+                    Hypothesis = p[1].Replace("\\|", "|"),
+                    Confidence = double.Parse(p[2]),
+                    Value      = p[3] == "NaN" ? double.NaN : double.Parse(p[3]),
+                    Strikes    = int.Parse(p[4]),
+                    Attempts   = int.Parse(p[5]),
+                    Resolved   = bool.Parse(p[6]),
+                    HumanNote  = p[7].Length > 0 ? p[7].Replace("\\|", "|") : null
+                });
+            }
+            return _facts.Count > 0;
+        }
+
+        public void SaveBitmap(string path)
+        {
+            var sorted = _facts.OrderByDescending(f => f.Confidence).ToList();
+            int n      = sorted.Count;
+            int barW   = 240, rowH = 32, indW = 16;
+            int width  = barW + indW, height = n * rowH;
+            byte[] px  = new byte[width * height * 3];
+
+            for (int i = 0; i < px.Length; i++) px[i] = 25; // dark background
+
+            for (int i = 0; i < n; i++)
+            {
+                var f      = sorted[i];
+                int y0     = i * rowH;
+                int filled = (int)(f.Confidence * barW);
+                var (r, g, bv) = BmpWriter.ConfColor(f.Confidence);
+
+                for (int dy = 1; dy < rowH - 1; dy++)
+                {
+                    for (int x = 0; x < filled; x++)
+                    {
+                        int idx = ((y0 + dy) * width + x) * 3;
+                        px[idx] = r; px[idx + 1] = g; px[idx + 2] = bv;
+                    }
+                    for (int x = barW; x < width; x++)
+                    {
+                        int idx = ((y0 + dy) * width + x) * 3;
+                        if (f.Resolved) { px[idx] = 0; px[idx + 1] = 180; px[idx + 2] = 0; }
+                        else            { px[idx] = px[idx + 1] = px[idx + 2] = 60; }
+                    }
+                }
+            }
+
+            BmpWriter.Save(path, width, height, px);
         }
     }
 
@@ -521,6 +593,9 @@ result  = mean(reward)",
         int _humanInteractions         = 0;
         string _pendingRerun           = null;
 
+        const string StateFile  = "self-knowledge-state.dat";
+        const string BitmapFile = "self-knowledge-state.bmp";
+
         public void Run()
         {
             Console.WriteLine("╔═══════════════════════════════════════════════════════════════╗");
@@ -528,9 +603,10 @@ result  = mean(reward)",
             Console.WriteLine("║  Generates programs to understand its own decision behavior   ║");
             Console.WriteLine("╚═══════════════════════════════════════════════════════════════╝\n");
 
-            Seed();
+            bool resumed = _kb.Load(StateFile);
+            if (!resumed) Seed();
 
-            Console.WriteLine($"  Seeded {8} knowledge topics.");
+            Console.WriteLine(resumed ? "  Resumed from saved state." : $"  Seeded {8} knowledge topics.");
             Console.WriteLine($"  Confidence threshold : {CONFIDENCE_THRESHOLD:F2}");
             Console.WriteLine($"  Max iterations       : {MAX_ITERATIONS}");
             Console.WriteLine($"  Below threshold → asks human for guidance\n");
@@ -699,6 +775,49 @@ result  = mean(reward)",
             Console.WriteLine($"║  Average confidence: {_kb.AverageConfidence():F2}                                  ║");
             Console.WriteLine("╚═══════════════════════════════════════════════════════════════╝");
             _kb.Print();
+
+            _kb.Save(StateFile);
+            _kb.SaveBitmap(BitmapFile);
+            Console.WriteLine($"State saved  → {StateFile}");
+            Console.WriteLine($"Confidence map → {BitmapFile}");
+        }
+    }
+
+    static class BmpWriter
+    {
+        public static void Save(string path, int width, int height, byte[] rgb)
+        {
+            int rowBytes = width * 3;
+            int pad      = (4 - rowBytes % 4) % 4;
+            int dataSize = (rowBytes + pad) * height;
+
+            using var f = File.Create(path);
+            void W4(int v) { f.WriteByte((byte)v); f.WriteByte((byte)(v >> 8)); f.WriteByte((byte)(v >> 16)); f.WriteByte((byte)(v >> 24)); }
+            void W2(int v) { f.WriteByte((byte)v); f.WriteByte((byte)(v >> 8)); }
+
+            f.WriteByte(0x42); f.WriteByte(0x4D);
+            W4(54 + dataSize); W4(0); W4(54);
+            W4(40); W4(width); W4(height); W2(1); W2(24);
+            W4(0); W4(dataSize); W4(2835); W4(2835); W4(0); W4(0);
+
+            var padBytes = new byte[pad];
+            for (int y = height - 1; y >= 0; y--)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int i = (y * width + x) * 3;
+                    f.WriteByte(rgb[i + 2]); f.WriteByte(rgb[i + 1]); f.WriteByte(rgb[i]);
+                }
+                f.Write(padBytes, 0, pad);
+            }
+        }
+
+        // Red → Yellow → Green  (c=0 low confidence, c=1 high confidence)
+        public static (byte r, byte g, byte b) ConfColor(double c)
+        {
+            c = c < 0 ? 0 : c > 1 ? 1 : c;
+            if (c < 0.5) return (255, (byte)(c * 2 * 255), 0);
+            return ((byte)((1 - (c - 0.5) * 2) * 255), 255, 0);
         }
     }
 

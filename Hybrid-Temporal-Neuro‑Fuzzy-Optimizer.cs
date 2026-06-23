@@ -1,45 +1,47 @@
 using System;
+using System.IO;
 
 namespace HybridTemporalAI
 {
     class Program
     {
+        const string WeightsFile = "optimizer-weights.dat";
+        const string BitmapFile  = "optimizer-weights.bmp";
+
         static void Main()
         {
-            var rand = new Random(42);
-
+            var rand     = new Random(42);
             var temporal = new TemporalFeatureExtractor(decay: 0.98);
-            var network = new NeuralNetwork(inputSize: 7, hiddenSize: 10, rand);
+            var network  = new NeuralNetwork(inputSize: 7, hiddenSize: 10, rand);
             bool? lastActionSafe = null;
 
+            int    startStep   = 0;
             double totalReward = 0.0;
+
+            bool resumed = network.Load(WeightsFile, out startStep, out totalReward);
+            Console.WriteLine(resumed
+                ? $"Resumed from step {startStep:N0}  (avg reward so far: {totalReward / startStep:F4})"
+                : "Starting fresh training.");
+
             int episodes = 100000;
 
-            for (int t = 1; t <= episodes; t++)
+            for (int t = startStep + 1; t <= startStep + episodes; t++)
             {
                 double dt = 1.0;
 
-                // Simulated environment state
-                double load = rand.NextDouble();
-                double error = rand.NextDouble();
+                double load    = rand.NextDouble();
+                double error   = rand.NextDouble();
                 double urgency = rand.NextDouble();
 
-                // Update temporal features
                 temporal.Update(load, error, dt);
 
-                // Build extended feature vector
                 var features = new double[]
                 {
-                    load,
-                    error,
-                    urgency,
-                    temporal.DLoad,
-                    temporal.DError,
-                    temporal.ILoad,
-                    temporal.IError
+                    load, error, urgency,
+                    temporal.DLoad, temporal.DError,
+                    temporal.ILoad, temporal.IError
                 };
 
-                // Module outputs
                 double heuristicScore = HeuristicEngine.ScoreSafeAction(
                     load, error, urgency,
                     temporal.DLoad, temporal.DError,
@@ -51,14 +53,12 @@ namespace HybridTemporalAI
 
                 double neuralScore = network.Predict(features);
 
-                // Combined decision
                 double combined = 0.45 * neuralScore
                                 + 0.30 * heuristicScore
                                 + 0.25 * fuzzyScore;
 
                 bool chooseSafe = combined >= 0.5;
 
-                // Reward function with penalties
                 double reward = EnvironmentReward(
                     load, error, urgency,
                     temporal.DError, temporal.IError,
@@ -66,25 +66,26 @@ namespace HybridTemporalAI
 
                 totalReward += reward;
 
-                // Training target:
-                // If safe choice was good, push output toward 1
-                // If fast choice was good, push output toward 0
                 double target = chooseSafe ? reward : (1.0 - reward);
-
                 network.Train(features, target, learningRate: 0.03);
-
                 lastActionSafe = chooseSafe;
 
                 if (t % 300 == 0)
                 {
                     Console.WriteLine(
-                        $"Step {t,4} | AvgReward={(totalReward / t):F4} | " +
+                        $"Step {t,6} | AvgReward={(totalReward / t):F4} | " +
                         $"NN={neuralScore:F3} H={heuristicScore:F3} F={fuzzyScore:F3} " +
                         $"Combined={combined:F3} Action={(chooseSafe ? "Safe" : "Fast")} Reward={reward:F3}");
                 }
             }
 
-            Console.WriteLine("\nTraining complete.");
+            int finalStep = startStep + episodes;
+            Console.WriteLine($"\nTraining complete. Total steps: {finalStep:N0}");
+
+            network.Save(WeightsFile, finalStep, totalReward);
+            network.SaveBitmap(BitmapFile);
+            Console.WriteLine($"Weights saved → {WeightsFile}");
+            Console.WriteLine($"Weight map   → {BitmapFile}");
         }
 
         static double EnvironmentReward(
@@ -391,5 +392,121 @@ namespace HybridTemporalAI
 
         private static double SigmoidDerivativeFromOutput(double y) =>
             y * (1.0 - y);
+
+        public void Save(string path, int stepCount, double totalReward)
+        {
+            using var writer = new StreamWriter(path);
+            writer.WriteLine(stepCount);
+            writer.WriteLine(totalReward.ToString("R"));
+            for (int i = 0; i < inputSize; i++)
+                for (int h = 0; h < hiddenSize; h++)
+                    writer.WriteLine(w1[i, h].ToString("R"));
+            for (int h = 0; h < hiddenSize; h++)
+                writer.WriteLine(b1[h].ToString("R"));
+            for (int h = 0; h < hiddenSize; h++)
+                writer.WriteLine(w2[h].ToString("R"));
+            writer.WriteLine(b2.ToString("R"));
+        }
+
+        public bool Load(string path, out int stepCount, out double totalReward)
+        {
+            stepCount = 0; totalReward = 0;
+            if (!File.Exists(path)) return false;
+            using var reader = new StreamReader(path);
+            stepCount   = int.Parse(reader.ReadLine()!);
+            totalReward = double.Parse(reader.ReadLine()!);
+            for (int i = 0; i < inputSize; i++)
+                for (int h = 0; h < hiddenSize; h++)
+                    w1[i, h] = double.Parse(reader.ReadLine()!);
+            for (int h = 0; h < hiddenSize; h++)
+                b1[h] = double.Parse(reader.ReadLine()!);
+            for (int h = 0; h < hiddenSize; h++)
+                w2[h] = double.Parse(reader.ReadLine()!);
+            b2 = double.Parse(reader.ReadLine()!);
+            return true;
+        }
+
+        public void SaveBitmap(string path)
+        {
+            int cell   = 20;
+            int rows   = inputSize + 2;   // w1 rows + b1 row + w2 row
+            int width  = hiddenSize * cell;
+            int height = rows * cell;
+            byte[] px  = new byte[width * height * 3];
+
+            double mx = 0.1;
+            for (int i = 0; i < inputSize; i++)
+                for (int j = 0; j < hiddenSize; j++)
+                    if (Math.Abs(w1[i, j]) > mx) mx = Math.Abs(w1[i, j]);
+            for (int j = 0; j < hiddenSize; j++)
+            {
+                if (Math.Abs(b1[j]) > mx) mx = Math.Abs(b1[j]);
+                if (Math.Abs(w2[j]) > mx) mx = Math.Abs(w2[j]);
+            }
+
+            void DrawCell(int row, int col, double val)
+            {
+                double t = (val / mx + 1.0) * 0.5;
+                var (r, g, bv) = BmpWriter.WeightColor(t);
+                int x0 = col * cell, y0 = row * cell;
+                for (int dy = 0; dy < cell; dy++)
+                    for (int dx = 0; dx < cell; dx++)
+                    {
+                        bool border = dx == 0 || dy == 0 || dx == cell - 1 || dy == cell - 1;
+                        int idx = ((y0 + dy) * width + (x0 + dx)) * 3;
+                        if (border) { px[idx] = px[idx + 1] = px[idx + 2] = 15; }
+                        else        { px[idx] = r; px[idx + 1] = g; px[idx + 2] = bv; }
+                    }
+            }
+
+            for (int i = 0; i < inputSize; i++)
+                for (int j = 0; j < hiddenSize; j++)
+                    DrawCell(i, j, w1[i, j]);
+            for (int j = 0; j < hiddenSize; j++)
+                DrawCell(inputSize,     j, b1[j]);
+            for (int j = 0; j < hiddenSize; j++)
+                DrawCell(inputSize + 1, j, w2[j]);
+
+            BmpWriter.Save(path, width, height, px);
+        }
+    }
+
+    static class BmpWriter
+    {
+        public static void Save(string path, int width, int height, byte[] rgb)
+        {
+            int rowBytes = width * 3;
+            int pad      = (4 - rowBytes % 4) % 4;
+            int dataSize = (rowBytes + pad) * height;
+
+            using var f = File.Create(path);
+            void W4(int v) { f.WriteByte((byte)v); f.WriteByte((byte)(v >> 8)); f.WriteByte((byte)(v >> 16)); f.WriteByte((byte)(v >> 24)); }
+            void W2(int v) { f.WriteByte((byte)v); f.WriteByte((byte)(v >> 8)); }
+
+            f.WriteByte(0x42); f.WriteByte(0x4D);
+            W4(54 + dataSize); W4(0); W4(54);
+            W4(40); W4(width); W4(height); W2(1); W2(24);
+            W4(0); W4(dataSize); W4(2835); W4(2835); W4(0); W4(0);
+
+            var padBytes = new byte[pad];
+            for (int y = height - 1; y >= 0; y--)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    int i = (y * width + x) * 3;
+                    f.WriteByte(rgb[i + 2]); f.WriteByte(rgb[i + 1]); f.WriteByte(rgb[i]);
+                }
+                f.Write(padBytes, 0, pad);
+            }
+        }
+
+        // Blue → White → Red  (t=0 most negative, t=0.5 zero, t=1 most positive)
+        public static (byte r, byte g, byte b) WeightColor(double t)
+        {
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            if (t < 0.5) { byte v = (byte)(t * 2 * 255); return (v, v, 255); }
+            byte u = (byte)((1 - (t - 0.5) * 2) * 255);
+            return (255, u, u);
+        }
     }
 }
