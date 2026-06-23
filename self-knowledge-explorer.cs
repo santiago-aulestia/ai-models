@@ -593,11 +593,14 @@ result  = mean(reward)",
         int _humanInteractions         = 0;
         string _pendingRerun           = null;
 
-        const string StateFile  = "self-knowledge-state.dat";
-        const string BitmapFile = "self-knowledge-state.bmp";
+        const string DataDir    = ".data";
+        const string StateFile  = ".data/self-knowledge-state.dat";
+        const string BitmapFile = ".data/self-knowledge-state.bmp";
 
         public void Run()
         {
+            Directory.CreateDirectory(DataDir);
+
             Console.WriteLine("╔═══════════════════════════════════════════════════════════════╗");
             Console.WriteLine("║           Self-Knowledge Explorer  — Hybrid AI               ║");
             Console.WriteLine("║  Generates programs to understand its own decision behavior   ║");

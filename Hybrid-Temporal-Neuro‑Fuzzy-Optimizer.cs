@@ -5,11 +5,14 @@ namespace HybridTemporalAI
 {
     class Program
     {
-        const string WeightsFile = "optimizer-weights.dat";
-        const string BitmapFile  = "optimizer-weights.bmp";
+        const string DataDir     = ".data";
+        const string WeightsFile = ".data/optimizer-weights.dat";
+        const string BitmapFile  = ".data/optimizer-weights.bmp";
 
         static void Main()
         {
+            Directory.CreateDirectory(DataDir);
+
             var rand     = new Random(42);
             var temporal = new TemporalFeatureExtractor(decay: 0.98);
             var network  = new NeuralNetwork(inputSize: 7, hiddenSize: 10, rand);
