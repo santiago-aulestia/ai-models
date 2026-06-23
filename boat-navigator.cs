@@ -102,19 +102,27 @@ namespace BoatNavigatorAI
             _curMag    = new float[_size, _size];
         }
 
-        public void Grow()
+        public void Resize(int newSize)
         {
-            int n = _size + 1;
+            newSize = Math.Clamp(newSize, 5, 25);
+            if (newSize == _size) return;
+            int n = newSize;
             var wa = new float[n, n]; var wm = new float[n, n];
             var ca = new float[n, n]; var cm = new float[n, n];
-            for (int c = 0; c < _size; c++)
-                for (int r = 0; r < _size; r++)
+            int copy = Math.Min(_size, n);
+            for (int c = 0; c < copy; c++)
+                for (int r = 0; r < copy; r++)
                 {
                     wa[c, r] = _windAngle[c, r]; wm[c, r] = _windMag[c, r];
                     ca[c, r] = _curAngle[c, r];  cm[c, r] = _curMag[c, r];
                 }
-            for (int r = 0; r < n; r++) { InitCell(wa, wm, n - 1, r, true); InitCell(ca, cm, n - 1, r, false); }
-            for (int c = 0; c < n - 1; c++) { InitCell(wa, wm, c, n - 1, true); InitCell(ca, cm, c, n - 1, false); }
+            for (int c = 0; c < n; c++)
+                for (int r = 0; r < n; r++)
+                    if (c >= _size || r >= _size)
+                    {
+                        InitCell(wa, wm, c, r, true);
+                        InitCell(ca, cm, c, r, false);
+                    }
             _windAngle = wa; _windMag = wm; _curAngle = ca; _curMag = cm;
             _size = n;
         }
@@ -486,8 +494,8 @@ namespace BoatNavigatorAI
         private Panel       rightPanel;
         private Label       lblTitle;
         private Button      btnStart, btnStop, btnReset;
-        private Label       lblGridSize;
-        private Button      btnGrow;
+        private Label         lblGridSize;
+        private NumericUpDown numGridSize;
         private Label       lblEpisodes, lblBest, lblAvg, lblStatus;
         private PictureBox  rewardPb;
         private Label       lblSpeed;
@@ -542,10 +550,12 @@ namespace BoatNavigatorAI
                 lblStatus.Text = "Status: Reset";
                 gridPb.Invalidate();
             };
-            btnGrow.Click += (s, e) =>
+            numGridSize.ValueChanged += (s, e) =>
             {
+                int newSize = (int)numGridSize.Value;
+                if (newSize == _env.Size) return;
                 _manager.Stop();
-                _env.Grow();
+                _env.Resize(newSize);
                 BoatPhysics.UpdatePoints(_env.Size);
                 _manager = new TrainingManager();
                 _manager.Updated += (ms, me) => { if (!IsDisposed) BeginInvoke((Action)UpdateStats); };
@@ -554,7 +564,6 @@ namespace BoatNavigatorAI
                 _selectedCell = null;
                 lblCellCoord.Text = "Click grid to select";
                 ClearCellEditor();
-                lblGridSize.Text   = $"Grid: {_env.Size}×{_env.Size}";
                 btnStart.Enabled   = true; btnStop.Enabled = false;
                 lblStatus.Text     = "Status: Idle";
                 UpdateStats();
@@ -580,6 +589,7 @@ namespace BoatNavigatorAI
             numWindMag.ValueChanged += (s, e) => ApplyCellEdit();
             numCurDir.ValueChanged  += (s, e) => ApplyCellEdit();
             numCurMag.ValueChanged  += (s, e) => ApplyCellEdit();
+            spdSlider.ValueChanged  += (s, e) => _animTimer.Interval = Math.Max(16, 500 / spdSlider.Value);
         }
 
         private void LoadCellEditor(int col, int row)
@@ -644,10 +654,10 @@ namespace BoatNavigatorAI
             btnReset = new Button { Text = "↺ Reset", Location = new Point(0, y), Width = 270 };
             rightPanel.Controls.Add(btnReset); y += 32;
 
-            lblGridSize = new Label { Text = $"Grid: {_env.Size}×{_env.Size}", Location = new Point(0, y + 3), AutoSize = true };
+            lblGridSize = new Label { Text = "Grid Size:", Location = new Point(0, y + 3), AutoSize = true };
             rightPanel.Controls.Add(lblGridSize);
-            btnGrow = new Button { Text = "+ Grow", Location = new Point(150, y), Width = 120, Height = 25 };
-            rightPanel.Controls.Add(btnGrow); y += 30;
+            numGridSize = new NumericUpDown { Location = new Point(88, y), Width = 72, Minimum = 5, Maximum = 25, Value = 5, Increment = 1, DecimalPlaces = 0 };
+            rightPanel.Controls.Add(numGridSize); y += 30;
 
             lblEpisodes = new Label { Text = "Episodes: 0",    Location = new Point(0, y), AutoSize = true }; rightPanel.Controls.Add(lblEpisodes); y += 20;
             lblBest     = new Label { Text = "Best Reward: –", Location = new Point(0, y), AutoSize = true }; rightPanel.Controls.Add(lblBest);     y += 20;
