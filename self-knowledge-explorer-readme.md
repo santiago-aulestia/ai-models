@@ -243,6 +243,20 @@ The program runs fully non-interactively when stdin is redirected (CI, scripts):
 dotnet run < /dev/null
 ```
 
+## Persistence
+
+On every run the program creates a `.data/` folder next to the working directory and writes:
+
+| File | Contents |
+|------|----------|
+| `.data/self-knowledge-state.dat` | All 8 knowledge facts: topic, hypothesis, confidence, value, strikes, attempts, resolved flag, notes |
+| `.data/self-knowledge-state.bmp` | Confidence dashboard for the current run (256×256 px) |
+| `.data/self-knowledge-state.N.bmp` | Numbered backup of the previous dashboard (increments each run) |
+
+On the next run the program loads the `.dat` file and skips seeding — topics already above the confidence threshold are not re-explored, so a converged knowledge base exits after a single iteration. Delete `.data/self-knowledge-state.dat` to start fresh.
+
+The `.data/` folder is gitignored and never committed.
+
 ---
 
 ## Design Notes

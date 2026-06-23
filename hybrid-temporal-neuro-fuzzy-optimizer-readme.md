@@ -268,6 +268,20 @@ csc "Hybrid-Temporal-Neuro‑Fuzzy-Optimizer.cs" -out:optimizer.exe
 mono optimizer.exe   # on non-Windows
 ```
 
+## Persistence
+
+On every run the program creates a `.data/` folder next to the working directory and writes:
+
+| File | Contents |
+|------|----------|
+| `.data/optimizer-weights.dat` | Neural network weights, total step count, cumulative reward |
+| `.data/optimizer-weights.bmp` | Weight heatmap for the current run (200×180 px) |
+| `.data/optimizer-weights.N.bmp` | Numbered backup of the previous heatmap (increments each run) |
+
+On the next run the program detects the `.dat` file, loads the saved weights, and resumes training from the saved step count — average reward and step numbering continue uninterrupted.
+
+The `.data/` folder is gitignored and never committed.
+
 ---
 
 ## Design Notes
