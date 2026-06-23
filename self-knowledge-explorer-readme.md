@@ -252,3 +252,19 @@ dotnet run < /dev/null
 - **`AdjustConfidence` vs `Update`:** Human guidance responses use `AdjustConfidence` to preserve the `Strikes` and `Attempts` counters. Using `Update` would have reset `Strikes = 0` on each acceptance, blocking the Strikes escape.
 - **Deterministic escapes:** Both escapes (Strikes ≥ 3 and Attempts ≥ 5) call `Resolve()`, not `Update()`, ensuring each topic is closed exactly once regardless of how many guidance responses have been given.
 - **Non-interactive detection** via `Console.IsInputRedirected` ensures the program never blocks when run in background or piped environments.
+
+---
+
+## Use Cases
+
+**Behavioral auditing of trained models.** After training a decision model, run the explorer against it to verify that its actual behavior matches design intent — confirming decision boundaries, reward sensitivities, and edge-case handling before deployment.
+
+**Reward function debugging.** Reward functions are often written once and rarely interrogated. The explorer surfaces hidden effects like ceiling saturation (the urgency bonus) or fixed offsets (the danger probe) that would otherwise only appear as unexplained performance plateaus during training.
+
+**Regression testing for decision logic.** Pin the knowledge base findings as acceptance criteria. If a refactor shifts the `danger_crossover` from 0.545 to 0.60, a CI run of the explorer will surface the discrepancy without requiring hand-crafted unit tests for every boundary.
+
+**Active learning scaffolding.** The confidence-weighted exploration loop (pick lowest confidence → experiment → update → escalate) is a reusable pattern for any system that needs to learn about itself incrementally. Swap out `Probe` for a different subject — a routing algorithm, a classifier, a simulation — and the framework handles prioritization and human escalation automatically.
+
+**Human-AI collaborative auditing.** In interactive mode, a domain expert can steer the exploration: confirming findings, overriding values, or flagging hypotheses as wrong. The system learns from each response and routes subsequent experiments to the remaining uncertainty, making efficient use of limited expert time.
+
+**Educational demonstration of epistemic uncertainty.** The confidence scores, contradiction tracking, and guided escalation make the learning process transparent — useful for teaching active learning, Bayesian belief updating, or human-in-the-loop ML concepts with a running, inspectable example.

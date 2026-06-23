@@ -277,3 +277,19 @@ mono optimizer.exe   # on non-Windows
 - **Module weights** (`0.45 / 0.30 / 0.25`) are fixed. The neural net is the primary learner; heuristic and fuzzy modules provide stable priors that prevent the network from oscillating early in training.
 - **Oscillation penalty** (`−0.05`) in the reward function discourages the system from rapidly alternating between Safe and Fast when danger is near the `0.55` threshold.
 - **Integral cap** at `5.0` prevents runaway accumulation when the system is in a sustained high-error state.
+
+---
+
+## Use Cases
+
+**Real-time infrastructure load balancing.** The Safe/Fast binary maps naturally to cautious vs. aggressive routing or throttling decisions. The temporal features (derivatives and integrals) capture momentum — distinguishing a load spike that just started from one that has been building for seconds — which pure threshold rules miss.
+
+**Adaptive rate limiting.** In API gateways or queue processors, the system can decide per-request whether to accept at full rate (Fast) or shed load (Safe) based on observed error rates and load trends. The heuristic and fuzzy modules provide conservative defaults while the neural net specializes over time.
+
+**Edge device anomaly response.** On devices where a local model must decide whether to alert (Safe) or continue normal operation (Fast), the hybrid architecture tolerates sensor noise: the fuzzy engine smooths out jitter, the heuristic rules encode domain knowledge, and the neural net adapts to device-specific signal distributions after deployment.
+
+**Prototype for hybrid ensemble decisions.** The weighted combination of a learned component (NN), a rule-based component (Heuristic), and a linguistic component (Fuzzy) is a studied pattern for safety-critical systems where interpretability and resilience matter. This implementation is a clean, minimal reference for evaluating that architecture on a new domain.
+
+**Benchmarking online learning algorithms.** The fixed environment (deterministic reward function, random inputs, 100k episodes) makes it easy to swap the neural network for another online learner — Q-learning, a linear classifier, an ELM — and compare convergence curves under identical conditions.
+
+**Teaching resource for hybrid AI.** Each module is self-contained and produces an inspectable score every timestep. The log output shows how individual components vote and how the combined score evolves, making it practical for classroom or self-study use when explaining ensemble methods, fuzzy logic, or online backpropagation.
